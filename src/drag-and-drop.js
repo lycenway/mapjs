@@ -1,4 +1,4 @@
-/*global MAPJS*/
+/*global _, MAPJS*/
 MAPJS.dragdrop = function (mapModel, stage) {
 	'use strict';
 	var currentDroppable,
@@ -24,14 +24,15 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			/*jslint eqeq: true*/
 			return x >= node.x &&
 				y >= node.y &&
-				x <= node.x + node.width - 2 * 10 &&
-				y <= node.y + node.height - 2 * 10;
+				x <= node.x + node.width &&
+				y <= node.y + node.height;
 		},
 		canDropOnNode = function (id, x, y, node) {
 			/*jslint eqeq: true*/
 			return id != node.id && isPointOverNode(x, y, node);
 		},
 		tryFlip = function (rootNode, nodeBeingDragged, nodeDragEndX) {
+
 			var flipRightToLeft = rootNode.x < nodeBeingDragged.x && nodeDragEndX < rootNode.x,
 				flipLeftToRight = rootNode.x > nodeBeingDragged.x && rootNode.x < nodeDragEndX;
 			if (flipRightToLeft || flipLeftToRight) {
@@ -39,13 +40,11 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			}
 			return false;
 		},
-		nodeDragMove = function (id, x, y) {
+		nodeDragMove = function (id, x, y, nodeX, nodeY, shouldCopy, shouldPositionAbsolutely) {
 			var nodeId, node;
-
 			if (!mapModel.isEditingEnabled()) {
 				return;
 			}
-
 			for (nodeId in mapModel.getCurrentLayout().nodes) {
 				node = mapModel.getCurrentLayout().nodes[nodeId];
 				if (canDropOnNode(id, x, y, node)) {
@@ -55,13 +54,24 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			}
 			updateCurrentDroppable(undefined);
 		},
-		nodeDragEnd = function (id, x, y, shouldCopy) {
+		nodeDragEnd = function (id, x, y, nodeX, nodeY, shouldCopy, shouldPositionAbsolutely) {
 			var nodeBeingDragged = mapModel.getCurrentLayout().nodes[id],
 				nodeId,
 				node,
 				rootNode = mapModel.getCurrentLayout().nodes[mapModel.getIdea().id],
-				verticallyClosestNode = { id: null, y: Infinity },
-				clone;
+				verticallyClosestNode = {
+					id: null,
+					y: Infinity
+				},
+				clone,
+				idea = mapModel.getIdea(),
+				parentIdea = idea.findParent(id),
+				parentNode = mapModel.getCurrentLayout().nodes[parentIdea.id],
+				maxSequence = 1,
+				validReposition = function () {
+					return nodeBeingDragged.level === 2 ||
+						((nodeBeingDragged.x - parentNode.x) * (x - parentNode.x) > 0);
+				};
 			if (!mapModel.isEditingEnabled()) {
 				mapModel.dispatchEvent('nodeMoved', nodeBeingDragged, 'failed');
 				return;
@@ -80,23 +90,34 @@ MAPJS.dragdrop = function (mapModel, stage) {
 					} else if (!mapModel.getIdea().changeParent(id, nodeId)) {
 						mapModel.dispatchEvent('nodeMoved', nodeBeingDragged, 'failed');
 						mapModel.analytic('nodeDragParentFailed');
+						idea.updateAttr(id, 'position');
 					}
 					return;
 				}
-				if ((nodeBeingDragged.x === node.x || nodeBeingDragged.x + nodeBeingDragged.width === node.x + node.width) && y < node.y) {
-					if (!verticallyClosestNode || node.y < verticallyClosestNode.y) {
-						verticallyClosestNode = node;
-					}
+
+			}
+			idea.startBatch();
+			if (nodeBeingDragged.level === 2) {
+				tryFlip(rootNode, nodeBeingDragged, x);
+			}
+			_.each(idea.sameSideSiblingIds(id), function (nodeId) {
+				node = mapModel.getCurrentLayout().nodes[nodeId];
+				if (y < node.y && node.y < verticallyClosestNode.y) {
+					verticallyClosestNode = node;
 				}
+			});
+			idea.positionBefore(id, verticallyClosestNode.id);
+			if (shouldPositionAbsolutely && validReposition()) {
+				mapModel.analytic('nodeManuallyPositioned');
+				mapModel.selectNode(id);
+				maxSequence = _.max(_.map(parentIdea.ideas, function (i) { return (i.id !== id && i.attr && i.attr.position && i.attr.position[2]) || 0; }));
+				idea.updateAttr(
+					id,
+					'position',
+					[Math.abs(nodeX - parentNode.x), nodeY - parentNode.y, maxSequence + 1]
+				);
 			}
-			if (tryFlip(rootNode, nodeBeingDragged, x)) {
-				return;
-			}
-			if (mapModel.getIdea().positionBefore(id, verticallyClosestNode.id)) {
-				return;
-			}
-			mapModel.dispatchEvent('nodeMoved', nodeBeingDragged, 'failed');
-			mapModel.analytic('nodeDragFailed');
+			idea.endBatch();
 		},
 		screenToStageCoordinates = function (x, y) {
 			return {
@@ -110,7 +131,6 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			}
 			return screenToStageCoordinates(evt.layerX, evt.layerY);
 		};
-
 	mapModel.addEventListener('nodeCreated', function (n) {
 		var node = findNodeOnStage(n.id);
 		node.on('dragstart', function () {
@@ -123,7 +143,11 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			nodeDragMove(
 				n.id,
 				stagePoint.x,
-				stagePoint.y
+				stagePoint.y,
+				node.getX(),
+				node.getY(),
+				evt.shiftKey,
+				evt.shiftKey
 			);
 		});
 		node.on('dragend', function (evt) {
@@ -134,6 +158,9 @@ MAPJS.dragdrop = function (mapModel, stage) {
 				n.id,
 				stagePoint.x,
 				stagePoint.y,
+				node.getX(),
+				node.getY(),
+				evt.shiftKey,
 				evt.shiftKey
 			);
 		});

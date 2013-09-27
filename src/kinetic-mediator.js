@@ -236,10 +236,10 @@ MAPJS.KineticMediator = function (mapModel, stage, imageRendering) {
 	mapModel.addEventListener('nodeTitleChanged', function (n) {
 		var node = nodeByIdeaId[n.id];
 		node.setText(n.title);
-//		layer.draw();
 	});
 	mapModel.addEventListener('connectorCreated', function (n) {
 		var connector = new Kinetic.Connector({
+			id: 'connector_' + n.to,
 			shapeFrom: nodeByIdeaId[n.from],
 			shapeTo: nodeByIdeaId[n.to],
 			stroke: '#888',
