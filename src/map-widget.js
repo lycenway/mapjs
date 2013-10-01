@@ -52,6 +52,7 @@ jQuery.fn.mapWidget = function (activityLog, mapModel, touchEnabled, imageRender
 				'a': 'openAttachment'
 			},
 			onScroll = function (event, delta, deltaX, deltaY) {
+				console.log('in scroll', delta, deltaX, deltaY);
 				if (event.target === jQuery(stage.getContainer()).find('canvas')[0]) {
 					if (Math.abs(deltaX) < 5) {
 						deltaX = deltaX * 5;
