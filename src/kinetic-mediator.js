@@ -73,7 +73,6 @@ MAPJS.KineticMediator = function (mapModel, stage, imageRendering) {
 			});
 		},
 		moveStage = function (deltaX, deltaY) {
-			console.log('before move stage', stage.getX(), stage.getY());
 			var visibleAfterMove, visibleBeforeMove;
 			if (!stage) {
 				return;
@@ -86,7 +85,6 @@ MAPJS.KineticMediator = function (mapModel, stage, imageRendering) {
 				if (deltaX !== 0) { stage.setX(stage.getX() + deltaX); }
 				stage.draw();
 			}
-			console.log('after move stage', stage.getX(), stage.getY());
 		},
 		resetStage = function () {
 			new Kinetic.Tween({
