@@ -356,7 +356,7 @@ MAPJS.content = function (contentAggregate, sessionKey) {
 		if (initialId) {
 			cachedId = parseInt(initialId, 10) - 1;
 		}
-		newIdea =  jsonToPaste && jsonToPaste.title && init(cleanUp(jsonToPaste), sessionFromId(initialId));
+		newIdea =  jsonToPaste && (jsonToPaste.title || jsonToPaste.attr) && init(cleanUp(jsonToPaste), sessionFromId(initialId));
 		if (!pasteParent || !newIdea) {
 			return false;
 		}
@@ -368,7 +368,7 @@ MAPJS.content = function (contentAggregate, sessionKey) {
 		logChange('paste', [parentIdeaId, jsonToPaste, newIdea.id], function () {
 			delete pasteParent.ideas[newRank];
 		}, originSession);
-		return true;
+		return newIdea.id;
 	};
 	contentAggregate.flip = function (ideaId) {
 		return contentAggregate.execCommand('flip', arguments);
@@ -474,7 +474,7 @@ MAPJS.content = function (contentAggregate, sessionKey) {
 		logChange('insertIntermediate', [inFrontOfIdeaId, title, newIdea.id], function () {
 			parentIdea.ideas[childRank] = oldIdea;
 		}, originSession);
-		return true;
+		return newIdea.id;
 	};
 	contentAggregate.changeParent = function (ideaId, newParentId) {
 		return contentAggregate.execCommand('changeParent', arguments);

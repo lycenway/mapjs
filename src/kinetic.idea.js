@@ -47,6 +47,7 @@
 		};
 		return link;
 	}
+
 	function createClip() {
 		var group, clip, props = {width: 5, height: 25, radius: 3, rotation: 0.1, strokeWidth: 2, clipTo: 10};
 		group = new Kinetic.Group();
@@ -66,6 +67,58 @@
 		});
 		return group;
 	}
+	function createIcon() {
+		var	icon = new Kinetic.Image({
+			x: 0,
+			y: 0,
+			width: 0,
+			height: 0
+		});
+		icon.oldDrawScene = icon.drawScene;
+		icon.updateMapjsAttribs = function (iconHash) {
+			var safeIconProp = function (name) {
+					return iconHash && iconHash[name];
+				},
+				imgUrl = safeIconProp('url'),
+				imgWidth = safeIconProp('width'),
+				imgHeight = safeIconProp('height');
+			if (this.getAttr('image') && this.getAttr('image').src !== imgUrl) {
+				this.getAttr('image').src = imgUrl || '';
+			}
+			this.setAttr('mapjs-image-url', imgUrl);
+			if (this.getAttr('width') !== imgWidth) {
+				this.setAttr('width', imgWidth);
+			}
+			if (this.getAttr('height') !== imgHeight) {
+				this.setAttr('height', imgHeight);
+			}
+			this.setVisible(imgUrl);
+		};
+		icon.initMapjsImage = function () {
+			var self = this,
+				imageSrc = this.getAttr('mapjs-image-url');
+			if (!imageSrc) {
+				return;
+			}
+			if (!this.getAttr('image')) {
+				this.setAttr('image', new Image());
+				this.getAttr('image').onload = function loadImage() {
+					self.getLayer().draw();
+				};
+				this.getAttr('image').src = imageSrc;
+			}
+		};
+		icon.drawScene = function () {
+			if (!this.getAttr('image')) {
+				this.initMapjsImage();
+			}
+			if (this.getAttr('mapjs-image-url')) {
+				this.oldDrawScene.apply(this, arguments);
+			}
+		};
+		return icon;
+	}
+
 	Kinetic.Idea = function (config) {
 		var ENTER_KEY_CODE = 13,
 			ESC_KEY_CODE = 27,
@@ -118,13 +171,14 @@
 		this.clip.on('click tap', function () {
 			self.fire(':request', {type: 'openAttachment', source: 'mouse'});
 		});
+		this.icon = createIcon();
 		this.add(this.rectbg1);
 		this.add(this.rectbg2);
 		this.add(this.rect);
+		this.add(this.icon);
 		this.add(this.text);
 		this.add(this.link);
 		this.add(this.clip);
-		this.activeWidgets = [this.link, this.clip];
 		this.setText = function (text) {
 			var replacement = breakWords(MAPJS.URLHelper.stripLink(text)) ||
 					(text.length < COLUMN_WORD_WRAP_LIMIT ? text : (text.substring(0, COLUMN_WORD_WRAP_LIMIT) + '...'));
@@ -302,6 +356,7 @@ Kinetic.Idea.prototype.getBackground = function () {
 	return validColor(this.mmAttr && this.mmAttr.style && this.mmAttr.style.background, defaultBg);
 };
 
+
 Kinetic.Idea.prototype.setStyle = function () {
 	'use strict';
 	/*jslint newcap: true*/
@@ -311,27 +366,92 @@ Kinetic.Idea.prototype.setStyle = function () {
 		isActivated = this.isActivated,
 		background = this.getBackground(),
 		tintedBackground = Color(background).mix(Color('#EEEEEE')).hexString(),
-		isClipVisible = this.mmAttr && this.mmAttr.attachment || false,
-		padding = 8,
-		clipMargin = isClipVisible ? this.clip.getClipMargin() : 0,
-		rectOffset = clipMargin,
+		rectOffset,
 		rectIncrement = 4,
+		padding = 8,
+		isClipVisible = self.mmAttr && self.mmAttr.attachment,
+		clipMargin = isClipVisible ? self.clip.getClipMargin() : 0,
 		getDash = function () {
 			if (!self.isActivated) {
 				return [];
 			}
 			return [5, 3];
+		},
+		textSize = {
+			width: this.text.getWidth(),
+			height: this.text.getHeight()
+		},
+		calculatedSize,
+		pad = function (box) {
+			return {
+				width: box.width + 2 * padding,
+				height: box.height + 2 * padding
+			};
+		},
+		positionTextAndIcon = function () {
+			var iconPos = self.mmAttr && self.mmAttr.icon && self.mmAttr.icon.position;
+			if (!iconPos || iconPos === 'center') {
+				self.text.setX((calculatedSize.width - self.text.getWidth()) / 2);
+				self.text.setY((calculatedSize.height - self.text.getHeight()) / 2 + clipMargin);
+				self.icon.setY((calculatedSize.height - self.icon.getHeight()) / 2 + clipMargin);
+				self.icon.setX((calculatedSize.width - self.icon.getWidth()) / 2);
+			} else if (iconPos === 'bottom') {
+				self.text.setX((calculatedSize.width - self.text.getWidth()) / 2);
+				self.text.setY(clipMargin + padding);
+				self.icon.setY(clipMargin + calculatedSize.height - self.icon.getHeight() - padding);
+				self.icon.setX((calculatedSize.width - self.icon.getWidth()) / 2);
+			} else if (iconPos === 'top') {
+				self.text.setX((calculatedSize.width - self.text.getWidth()) / 2);
+				self.icon.setY(clipMargin + padding);
+				self.text.setY(clipMargin + calculatedSize.height - self.text.getHeight() - padding);
+				self.icon.setX((calculatedSize.width - self.icon.getWidth()) / 2);
+			} else if (iconPos === 'left') {
+				self.text.setX(calculatedSize.width - self.text.getWidth() - padding);
+				self.text.setY((calculatedSize.height - self.text.getHeight()) / 2 + clipMargin);
+				self.icon.setY((calculatedSize.height - self.icon.getHeight()) / 2 + clipMargin);
+				self.icon.setX(padding);
+			} else if (iconPos === 'right') {
+				self.text.setY((calculatedSize.height - self.text.getHeight()) / 2 + clipMargin);
+				self.text.setX(padding);
+				self.icon.setY((calculatedSize.height - self.icon.getHeight()) / 2 + clipMargin);
+				self.icon.setX(calculatedSize.width - self.icon.getWidth() - padding);
+			}
+		},
+		calculateMergedBoxSize = function (box1, box2) {
+			if (box2.position === 'bottom' || box2.position === 'top') {
+				return {
+					width: Math.max(box1.width, box2.width) + 2 * padding,
+					height: box1.height + box2.height + 3 * padding
+				};
+			}
+			if (box2.position === 'left' || box2.position === 'right') {
+				return {
+					width: box1.width + box2.width + 3 * padding,
+					height: Math.max(box1.height, box2.height) + 2 * padding
+				};
+			}
+			return pad({
+				width: Math.max(box1.width, box2.width),
+				height: Math.max(box1.height, box2.height)
+			});
 		};
-	this.clip.setVisible(isClipVisible);
-	this.setWidth(this.text.getWidth() + 2 * padding);
-	this.setHeight(this.text.getHeight() + 2 * padding + clipMargin);
-	this.text.setX(padding);
-	this.text.setY(padding + clipMargin);
-	this.link.setX(this.text.getWidth() + 10);
-	this.link.setY(this.text.getHeight() + 5 + clipMargin);
+	if (this.mmAttr && this.mmAttr.icon && this.mmAttr.icon.url) {
+		calculatedSize = calculateMergedBoxSize(textSize, this.mmAttr.icon);
+	} else {
+		calculatedSize = pad(textSize);
+	}
+	this.icon.updateMapjsAttribs(self.mmAttr && self.mmAttr.icon);
+
+	this.clip.setVisible(clipMargin);
+	this.setWidth(calculatedSize.width);
+	this.setHeight(calculatedSize.height + clipMargin);
+	this.link.setX(calculatedSize.width - 2 * padding + 10);
+	this.link.setY(calculatedSize.height - 2 * padding + 5 + clipMargin);
+	positionTextAndIcon();
+	rectOffset = clipMargin;
 	_.each([this.rect, this.rectbg2, this.rectbg1], function (r) {
-		r.setWidth(self.text.getWidth() + 2 * padding);
-		r.setHeight(self.text.getHeight() + 2 * padding);
+		r.setWidth(calculatedSize.width);
+		r.setHeight(calculatedSize.height);
 		r.setY(rectOffset);
 		rectOffset += rectIncrement;
 		if (isDroppable) {
@@ -371,7 +491,7 @@ Kinetic.Idea.prototype.setStyle = function () {
 	this.rect.setStrokeWidth(this.isActivated ? 3 : self.rectAttrs.strokeWidth);
 	this.rectbg1.setVisible(this.isCollapsed());
 	this.rectbg2.setVisible(this.isCollapsed());
-	this.clip.setX(this.text.getWidth() + padding);
+	this.clip.setX(calculatedSize.width - padding);
 	this.setupShadows();
 	this.text.setFill(MAPJS.contrastForeground(tintedBackground));
 };

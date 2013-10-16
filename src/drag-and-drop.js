@@ -1,4 +1,5 @@
-/*global _, MAPJS*/
+/*global _, MAPJS, jQuery*/
+/*jslint forin:true*/
 MAPJS.dragdrop = function (mapModel, stage) {
 	'use strict';
 	var currentDroppable,
@@ -41,6 +42,7 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			return false;
 		},
 		nodeDragMove = function (id, x, y, nodeX, nodeY, shouldCopy, shouldPositionAbsolutely) {
+
 			var nodeId, node;
 			if (!mapModel.isEditingEnabled()) {
 				return;
@@ -54,11 +56,14 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			}
 			updateCurrentDroppable(undefined);
 		},
+		getRootNode = function () {
+			return mapModel.getCurrentLayout().nodes[mapModel.getIdea().id];
+		},
 		nodeDragEnd = function (id, x, y, nodeX, nodeY, shouldCopy, shouldPositionAbsolutely) {
 			var nodeBeingDragged = mapModel.getCurrentLayout().nodes[id],
 				nodeId,
 				node,
-				rootNode = mapModel.getCurrentLayout().nodes[mapModel.getIdea().id],
+				rootNode = getRootNode(),
 				verticallyClosestNode = {
 					id: null,
 					y: Infinity
@@ -131,9 +136,34 @@ MAPJS.dragdrop = function (mapModel, stage) {
 			}
 			return screenToStageCoordinates(evt.layerX, evt.layerY);
 		};
+	jQuery(stage.getContainer()).imageDropWidget(new MAPJS.ImageInsertController(function (dataUrl, imgWidth, imgHeight, evt) {
+		var node,
+			nodeId,
+			content = mapModel.getIdea(),
+			point = getInteractionPoint(evt),
+			dropOn = function (ideaId, position) {
+				var scaleX = Math.min(imgWidth, 300) / imgWidth,
+					scaleY = Math.min(imgHeight, 300) / imgHeight,
+					scale = Math.min(scaleX, scaleY);
+				mapModel.setIcon('drag and drop', dataUrl, Math.round(imgWidth * scale), Math.round(imgHeight * scale), position, ideaId);
+			},
+			addNew = function () {
+				content.startBatch();
+				dropOn(content.addSubIdea(mapModel.getSelectedNodeId()), 'center');
+				content.endBatch();
+			};
+		for (nodeId in mapModel.getCurrentLayout().nodes) {
+			node = mapModel.getCurrentLayout().nodes[nodeId];
+			if (isPointOverNode(point.x, point.y, node)) {
+				return dropOn(nodeId, 'left');
+			}
+		}
+		addNew();
+	}));
 	mapModel.addEventListener('nodeCreated', function (n) {
-		var node = findNodeOnStage(n.id);
-		node.on('dragstart', function () {
+		var node = findNodeOnStage(n.id), shouldPositionAbsolutely;
+		node.on('dragstart', function (evt) {
+			shouldPositionAbsolutely = evt.shiftKey;
 			node.moveToTop();
 			node.setShadowOffset(8);
 			node.setOpacity(0.3);
@@ -147,7 +177,7 @@ MAPJS.dragdrop = function (mapModel, stage) {
 				node.getX(),
 				node.getY(),
 				evt.shiftKey,
-				evt.shiftKey
+				shouldPositionAbsolutely
 			);
 		});
 		node.on('dragend', function (evt) {
@@ -161,7 +191,7 @@ MAPJS.dragdrop = function (mapModel, stage) {
 				node.getX(),
 				node.getY(),
 				evt.shiftKey,
-				evt.shiftKey
+				shouldPositionAbsolutely
 			);
 		});
 	});

@@ -96,17 +96,16 @@ MAPJS.MapModel = function (layoutCalculator, titlesToRandomlyChooseFrom, interme
 		revertSelectionForUndo,
 		checkDefaultUIActions = function (command, args) {
 			var newIdeaId;
-			if (command === 'addSubIdea' || command === 'insertIntermediate') {
-				newIdeaId = args[2];
-				revertSelectionForUndo = currentlySelectedIdeaId;
-				self.selectNode(newIdeaId);
-				self.editNode(false, true, true);
-			}
 			if (command === 'paste') {
 				newIdeaId = args[2];
 				self.selectNode(newIdeaId);
 			}
 
+		},
+		editNewIdea = function (newIdeaId) {
+			revertSelectionForUndo = currentlySelectedIdeaId;
+			self.selectNode(newIdeaId);
+			self.editNode(false, true, true);
 		},
 		getCurrentlySelectedIdeaId = function () {
 			return currentlySelectedIdeaId || idea.id;
@@ -236,7 +235,8 @@ MAPJS.MapModel = function (layoutCalculator, titlesToRandomlyChooseFrom, interme
 			contextNode = function () {
 				return contextNodeId && currentLayout && currentLayout.nodes && currentLayout.nodes[contextNodeId];
 			},
-			oldContext, newContext;
+			oldContext,
+			newContext;
 		oldContext = contextNode();
 		if (isInputEnabled) {
 			self.applyToActivated(function (id) {
@@ -291,14 +291,18 @@ MAPJS.MapModel = function (layoutCalculator, titlesToRandomlyChooseFrom, interme
 		if (!isEditingEnabled) {
 			return false;
 		}
-		var target = parentId || currentlySelectedIdeaId;
+		var target = parentId || currentlySelectedIdeaId, newId;
 		analytic('addSubIdea', source);
 		if (isInputEnabled) {
 			idea.batch(function () {
 				ensureNodeIsExpanded(source, target);
-				idea.addSubIdea(target, getRandomTitle(titlesToRandomlyChooseFrom));
+				newId = idea.addSubIdea(target, getRandomTitle(titlesToRandomlyChooseFrom));
 			});
+			if (newId) {
+				editNewIdea(newId);
+			}
 		}
+
 	};
 	this.insertIntermediate = function (source) {
 		if (!isEditingEnabled) {
@@ -307,20 +311,27 @@ MAPJS.MapModel = function (layoutCalculator, titlesToRandomlyChooseFrom, interme
 		if (!isInputEnabled || currentlySelectedIdeaId === idea.id) {
 			return false;
 		}
-		idea.insertIntermediate(currentlySelectedIdeaId, getRandomTitle(intermediaryTitlesToRandomlyChooseFrom));
 		analytic('insertIntermediate', source);
+		var newId = idea.insertIntermediate(currentlySelectedIdeaId, getRandomTitle(intermediaryTitlesToRandomlyChooseFrom));
+		if (newId) {
+			editNewIdea(newId);
+		}
 	};
 	this.addSiblingIdea = function (source) {
+		var newId, parent;
 		if (!isEditingEnabled) {
 			return false;
 		}
 		analytic('addSiblingIdea', source);
 		if (isInputEnabled) {
-			var parent = idea.findParent(currentlySelectedIdeaId) || idea;
+			parent = idea.findParent(currentlySelectedIdeaId) || idea;
 			idea.batch(function () {
 				ensureNodeIsExpanded(source, parent.id);
-				idea.addSubIdea(parent.id, getRandomTitle(titlesToRandomlyChooseFrom));
+				newId = idea.addSubIdea(parent.id, getRandomTitle(titlesToRandomlyChooseFrom));
 			});
+			if (newId) {
+				editNewIdea(newId);
+			}
 		}
 	};
 	this.removeSubIdea = function (source) {
@@ -362,6 +373,18 @@ MAPJS.MapModel = function (layoutCalculator, titlesToRandomlyChooseFrom, interme
 			shouldSelectAll = true;
 		}
 		self.dispatchEvent('nodeEditRequested', currentlySelectedIdeaId, shouldSelectAll, !!editingNew);
+	};
+	this.editIcon = function (source) {
+		if (!isEditingEnabled) {
+			return false;
+		}
+		if (source) {
+			analytic('editIcon', source);
+		}
+		if (!isInputEnabled) {
+			return false;
+		}
+		self.dispatchEvent('nodeIconEditRequested', currentlySelectedIdeaId);
 	};
 	this.scaleUp = function (source) {
 		self.scale(source, 1.25);
@@ -516,9 +539,41 @@ MAPJS.MapModel = function (layoutCalculator, titlesToRandomlyChooseFrom, interme
 			});
 		}
 	};
+	self.getIcon = function (nodeId) {
+		var node = currentLayout.nodes[nodeId || currentlySelectedIdeaId];
+		if (!node) {
+			return false;
+		}
+		return node.attr && node.attr.icon;
+	};
+	self.setIcon = function (source, url, imgWidth, imgHeight, position, nodeId) {
+		if (!isEditingEnabled) {
+			return false;
+		}
+		analytic('setIcon', source);
+		nodeId = nodeId || currentlySelectedIdeaId;
+		var nodeIdea = self.findIdeaById(nodeId);
+		if (!nodeIdea) {
+			return false;
+		}
+		if (url) {
+			idea.updateAttr(nodeId, 'icon', {
+				url: url,
+				width: imgWidth,
+				height: imgHeight,
+				position: position
+			});
+		} else if (nodeIdea.title || nodeId === idea.id) {
+			idea.updateAttr(nodeId, 'icon', false);
+		} else {
+			idea.removeSubIdea(nodeId);
+		}
+	};
 	self.moveUp = function (source) { self.moveRelative(source, -1); };
 	self.moveDown = function (source) { self.moveRelative(source, 1); };
-
+	self.getSelectedNodeId = function () {
+		return getCurrentlySelectedIdeaId();
+	};
 	//node activation
 	(function () {
 		var activatedNodes = [],

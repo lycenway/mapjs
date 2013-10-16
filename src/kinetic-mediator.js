@@ -57,7 +57,7 @@ Kinetic.Stage.prototype.isRectVisible = function (rect, offset) {
 	);
 };
 
-MAPJS.KineticMediator = function (mapModel, stage, imageRendering) {
+MAPJS.KineticMediator = function (mapModel, stage) {
 	'use strict';
 	window.stage = stage;
 	var layer = new Kinetic.Layer(),
@@ -159,9 +159,6 @@ MAPJS.KineticMediator = function (mapModel, stage, imageRendering) {
 			id: 'node_' + n.id,
 			activated: n.activated
 		});
-		if (imageRendering) {
-			node = Kinetic.IdeaProxy(node, stage, layer);
-		}
 		node.on('click tap', function (evt) { mapModel.clickNode(n.id, evt); });
 		node.on('dblclick dbltap', function () {
 			if (!mapModel.getEditingEnabled()) {
@@ -350,16 +347,44 @@ MAPJS.KineticMediator = function (mapModel, stage, imageRendering) {
 		});
 	}());
 };
-MAPJS.KineticMediator.dimensionProvider = _.memoize(function (title) {
+MAPJS.calculateMergedBoxSize = function (box1, box2) {
 	'use strict';
-	var text = new Kinetic.Idea({
-		text: title
-	});
+	if (box2.position === 'bottom' || box2.position === 'top') {
+		return {
+			width: Math.max(box1.width, box2.width),
+			height: box1.height + box2.height
+		};
+	}
+	if (box2.position === 'left' || box2.position === 'right') {
+		return {
+			width: box1.width + box2.width,
+			height: Math.max(box1.height, box2.height)
+		};
+	}
 	return {
-		width: text.getWidth(),
-		height: text.getHeight()
+		width: Math.max(box1.width, box2.width),
+		height: Math.max(box1.height, box2.height)
 	};
-});
+};
+MAPJS.KineticMediator.dimensionProvider = _.memoize(
+	function (content) {
+		'use strict';
+		var shape = new Kinetic.Idea({
+			text: content.title,
+			mmAttr: content.attr
+		});
+		return {
+			width: shape.getWidth(),
+			height: shape.getHeight()
+		};
+	},
+	function (content) {
+		'use strict';
+		var iconSize = (content.attr && content.attr.icon && (':' + content.attr.icon.width + 'x' + content.attr.icon.height + 'x' + content.attr.icon.position)) || ':0x0x0';
+		return content.title + iconSize;
+	}
+);
+
 MAPJS.KineticMediator.layoutCalculator = function (idea) {
 	'use strict';
 	return MAPJS.calculateLayout(idea, MAPJS.KineticMediator.dimensionProvider);
