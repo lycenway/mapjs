@@ -68,17 +68,16 @@
 	var oldRequestAnimationFrame = Kinetic.Animation.requestAnimFrame,
 		framerateText = jQuery('#framerate'),
 		t0 = Date.now(),
+		lastSample = t0,
 		frames = 0;
 	Kinetic.Animation.requestAnimFrame = function () {
-		var lapsed = Date.now() - t0;
 		frames++;
 		if (oldRequestAnimationFrame) {
 			oldRequestAnimationFrame.apply(window, arguments);
 		}
-		if (lapsed > 3000) {
-			framerateText.text((frames * 1000 / lapsed).toFixed(2));
-			frames = 0;
-			t0 = Date.now();
+		if (Date.now() - lastSample > 2000) {
+			framerateText.text((frames * 1000 / (Date.now() - t0)).toFixed(2));
+			lastSample = Date.now();
 		}
 	};
 }());

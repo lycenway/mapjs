@@ -59,28 +59,33 @@ Kinetic.Stage.prototype.isRectVisible = function (rect, offset) {
 
 MAPJS.KineticMediator = function (mapModel, stage) {
 	'use strict';
-	window.stage = stage;
 	var layer = new Kinetic.Layer(),
 		nodeByIdeaId = {},
 		connectorByFromIdeaIdToIdeaId = {},
 		connectorKey = function (fromIdeaId, toIdeaId) {
 			return fromIdeaId + '_' + toIdeaId;
 		},
-		atLeastOneVisible = function (list, deltaX, deltaY) {
-			var margin = Math.min(stage.getHeight(), stage.getWidth()) * 0.1;
+		firstVisible = function (list, offset) {
 			return _.find(list, function (node) {
-				return node.isVisible({x: deltaX, y: deltaY, margin: margin});
+				return node.isVisible(offset);
 			});
 		},
+		firstVisibleNodeOrConnector = function (offset) {
+			return firstVisible(nodeByIdeaId, offset) || firstVisible(connectorByFromIdeaIdToIdeaId, offset);
+		},
+		visibleAfterMove,
 		moveStage = function (deltaX, deltaY) {
-			var visibleAfterMove, visibleBeforeMove;
+			var margin = Math.min(stage.getHeight(), stage.getWidth()) * 0.1,
+				afterMove = {x: deltaX, y: deltaY, margin: margin},
+				beforeMove = {x: 0, y: 0, margin: margin},
+				oldNode;
 			if (!stage) {
 				return;
 			}
-
-			visibleBeforeMove = atLeastOneVisible(nodeByIdeaId, 0, 0) || atLeastOneVisible(connectorByFromIdeaIdToIdeaId, 0, 0);
-			visibleAfterMove = atLeastOneVisible(nodeByIdeaId, deltaX, deltaY) || atLeastOneVisible(connectorByFromIdeaIdToIdeaId, deltaX, deltaY);
-			if (visibleAfterMove || (!visibleBeforeMove)) {
+			if (!visibleAfterMove || !visibleAfterMove.getParent() || !visibleAfterMove.isVisible(afterMove)) {
+				visibleAfterMove = firstVisibleNodeOrConnector(afterMove);
+			}
+			if (visibleAfterMove || (!firstVisibleNodeOrConnector(beforeMove))) {
 				if (deltaY !== 0) { stage.setY(stage.getY() + deltaY); }
 				if (deltaX !== 0) { stage.setX(stage.getX() + deltaX); }
 				stage.draw();
@@ -225,7 +230,7 @@ MAPJS.KineticMediator = function (mapModel, stage) {
 			node: node,
 			x: n.x,
 			y: n.y,
-			easing: reason === 'failed' ? Kinetic.Easings.BounceEaseOut: Kinetic.Easings.EaseInOut,
+			easing: reason === 'failed' ? Kinetic.Easings.BounceEaseOut : Kinetic.Easings.EaseInOut,
 			duration: 0.4,
 			onFinish: ensureSelectedNodeVisible.bind(undefined, node)
 		}).play();
@@ -336,9 +341,9 @@ MAPJS.KineticMediator = function (mapModel, stage) {
 		stage.on('dragmove', function () {
 			var deltaX = x - stage.getX(),
 				deltaY = y - stage.getY(),
-				visibleAfterMove = atLeastOneVisible(nodeByIdeaId, 0, 0) || atLeastOneVisible(connectorByFromIdeaIdToIdeaId, 0, 0),
-				shouldMoveBack = !visibleAfterMove && !(atLeastOneVisible(nodeByIdeaId, deltaX, deltaY) || atLeastOneVisible(connectorByFromIdeaIdToIdeaId, deltaX, deltaY));
-			if (shouldMoveBack) {
+				margin = Math.min(stage.getHeight(), stage.getWidth()) * 0.1,
+				visibleAfterMove = firstVisibleNodeOrConnector({x: 0, y: 0, margin: margin});
+			if (!visibleAfterMove) {
 				moveStage(deltaX, deltaY);
 			} else {
 				x = stage.getX();
